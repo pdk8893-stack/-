@@ -1,65 +1,67 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { initializeApp, getApps, cert } from 'firebase-admin/app'
-import { getFirestore } from 'firebase-admin/firestore'
+import { initializeApp, getApps } from 'firebase/app'
+import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc, query, where } from 'firebase/firestore'
 
-function getAdminDb() {
+function getDb() {
   if (!getApps().length) {
     initializeApp({
-      credential: cert({
-        projectId: process.env.FIREBASE_ADMIN_PROJECT_ID,
-        clientEmail: process.env.FIREBASE_ADMIN_CLIENT_EMAIL,
-        privateKey: process.env.FIREBASE_ADMIN_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-      }),
+      apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+      authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+      projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+      storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+      messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+      appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
     })
   }
   return getFirestore()
 }
 
-// GET /api/receipts?branch=yongin&month=2026-03
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url)
     const branch = searchParams.get('branch')
     const month = searchParams.get('month')
-
-    const db = getAdminDb()
-    let query: FirebaseFirestore.Query = db.collection('receipts')
-    if (branch) query = query.where('branch', '==', branch)
-    if (month) query = query.where('month', '==', month)
-
-    const snap = await query.orderBy('date', 'desc').get()
+    const db = getDb()
+    const ref = collection(db, 'receipts')
+    const conditions: any[] = []
+    if (branch) conditions.push(where('branch', '==', branch))
+    if (month) conditions.push(where('month', '==', month))
+    const q = conditions.length > 0 ? query(ref, ...conditions) : query(ref)
+    const snap = await getDocs(q)
     const receipts = snap.docs.map(d => ({ id: d.id, ...d.data() }))
     return NextResponse.json(receipts)
   } catch (e: any) {
+    console.error('GET error:', e)
     return NextResponse.json({ error: e.message }, { status: 500 })
   }
 }
 
-// POST /api/receipts  — create
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const db = getAdminDb()
-    const ref = await db.collection('receipts').add({
-      ...body,
+    const { thumb, ...rest } = body
+    const db = getDb()
+    const ref = await addDoc(collection(db, 'receipts'), {
+      ...rest,
       createdAt: new Date().toISOString(),
     })
     return NextResponse.json({ id: ref.id })
   } catch (e: any) {
+    console.error('POST error:', e)
     return NextResponse.json({ error: e.message }, { status: 500 })
   }
 }
 
-// DELETE /api/receipts?id=xxx
 export async function DELETE(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url)
     const id = searchParams.get('id')
     if (!id) return NextResponse.json({ error: 'id 없음' }, { status: 400 })
-    const db = getAdminDb()
-    await db.collection('receipts').doc(id).delete()
+    const db = getDb()
+    await deleteDoc(doc(db, 'receipts', id))
     return NextResponse.json({ ok: true })
   } catch (e: any) {
+    console.error('DELETE error:', e)
     return NextResponse.json({ error: e.message }, { status: 500 })
   }
 }

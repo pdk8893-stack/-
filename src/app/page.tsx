@@ -74,10 +74,21 @@ export default function ReceiptApp() {
     setProcessing(p => [...p, { id: pid, name: file.name }])
 
     // Convert to base64
-    const base64 = await new Promise<string>(res => {
-      const reader = new FileReader()
-      reader.onload = e => res((e.target!.result as string).split(',')[1])
-      reader.readAsDataURL(file)
+const base64 = await new Promise<string>(res => {
+      const canvas = document.createElement('canvas')
+      const img = new Image()
+      img.onload = () => {
+        const max = 1024
+        let w = img.width, h = img.height
+        if (w > max || h > max) {
+          if (w > h) { h = Math.round(h * max / w); w = max }
+          else { w = Math.round(w * max / h); h = max }
+        }
+        canvas.width = w; canvas.height = h
+        canvas.getContext('2d')!.drawImage(img, 0, 0, w, h)
+        res(canvas.toDataURL('image/jpeg', 0.7).split(',')[1])
+      }
+      img.src = URL.createObjectURL(file)
     })
     const thumbUrl = await new Promise<string>(res => {
       const r2 = new FileReader()
